@@ -12,16 +12,18 @@ import (
 	"time"
 )
 
-var csvsource = flag.String("f", "problems.csv", "path to quiz data, CSV format required")
-var timeout = flag.Int("t", 30, "sets timeout in seconds per question")
+var csvFilename = flag.String("f", "problems.csv", "csv file in the format of 'problem, correct answer'")
+var timeLimit = flag.Int("t", 30, "the time limit for the quiz in seconds")
+
+type Problems = []problem
 
 func main() {
 	flag.Parse()
 
 	app := filepath.Dir(os.Args[0])
-	file, err := os.Open(filepath.Join(app, *csvsource))
+	file, err := os.Open(filepath.Join(app, *csvFilename))
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Failed to open the CSV file: %s\n", *csvFilename)
 	}
 	defer func() {
 		if err = file.Close(); err != nil {
@@ -30,47 +32,69 @@ func main() {
 	}()
 
 	csv := csv.NewReader(file)
-	ss, err := csv.ReadAll()
+	records, err := csv.ReadAll()
 	if err != nil {
-		log.Printf("Couldn't parse %s entry: %v\n", ss, err)
+		log.Printf("Couldn't parse CSV file: %v\n", err)
 	}
+	problems := questionsPool(records)
 
 	scan := bufio.NewScanner(os.Stdin)
-	answers := make([]int, len(ss))
+	answers := make([]int, len(problems))
 	resp := make(chan int)
+	timeout := time.Tick(time.Duration(*timeLimit) * time.Second)
 
-	for i, v := range ss {
-		fmt.Printf("[%d] Question: %s\n", i+1, v[0])
+quizloop:
+	for i, p := range problems {
+		fmt.Printf("Question #%d: %s\n", i+1, p.q)
 		go func(<-chan int) {
 			scan.Scan()
 			if scan.Err() != nil {
 				log.Fatal("scanner internal error")
 			}
-			input := scan.Text()
-			value, err := strconv.Atoi(input)
+			ans := scan.Text()
+			value, err := strconv.Atoi(ans)
 			if err != nil {
 				log.Println(err)
 			}
 			resp <- value
 		}(resp)
+
 		select {
 		case ans := <-resp:
 			answers[i] = ans
-		case <-time.After(time.Duration(*timeout) * time.Second):
-			fmt.Println("Too slow, next question")
-			answers[i] = -1
+		case <-timeout:
+			fmt.Println("Time ran out, sorry!")
+			break quizloop
 		}
 	}
 
 	var score int
-	for i, v := range answers {
-		correctAns, err := strconv.Atoi(ss[i][1])
-		if err != nil {
-			log.Fatal(err)
-		}
-		if correctAns == v {
+	for i, a := range answers {
+		problem := problems[i]
+		if a == problem.ans {
 			score++
 		}
 	}
-	fmt.Printf("You scored: %d of %d\n", score, len(answers))
+	fmt.Printf("You scored: %d out of %d\n", score, len(problems))
+}
+
+type problem struct {
+	q   string
+	ans int
+}
+
+
+func questionsPool(r [][]string) Problems {
+	quiz := make(Problems, len(r))	
+	for i, v := range r {
+		var p problem
+		p.q = v[0]
+		num, err := strconv.Atoi(v[1])
+		if err != nil {
+			log.Fatalln("CSV answer field is not convertable to integer")
+		}
+		p.ans = num
+		quiz[i] = p
+	}
+	return quiz
 }
