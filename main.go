@@ -17,6 +17,7 @@ var csvFilename = flag.String("f", defaultCSV, "csv file in the format of 'probl
 var timeLimit = flag.Int("t", 30, "the time limit for a quiz in seconds")
 
 // Problems is a type describing a collection of all questions to solve in a single round.
+
 type Problems = []problem
 
 func main() {
