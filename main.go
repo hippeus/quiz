@@ -12,18 +12,23 @@ import (
 	"time"
 )
 
-var csvFilename = flag.String("f", "problems.csv", "csv file in the format of 'problem, correct answer'")
-var timeLimit = flag.Int("t", 30, "the time limit for the quiz in seconds")
+var defaultCSV = "problems.csv"
+var csvFilename = flag.String("f", defaultCSV, "csv file in the format of 'problem, correct answer'")
+var timeLimit = flag.Int("t", 30, "the time limit for a quiz in seconds")
 
+// Problems is a type describing a collection of all questions to solve in a single round.
 type Problems = []problem
 
 func main() {
 	flag.Parse()
 
-	app := filepath.Dir(os.Args[0])
-	file, err := os.Open(filepath.Join(app, *csvFilename))
+	var appPath string
+	if *csvFilename == defaultCSV {
+		appPath = filepath.Dir(os.Args[0])
+	}
+	file, err := os.Open(filepath.Join(appPath, *csvFilename))
 	if err != nil {
-		log.Fatalf("Failed to open the CSV file: %s\n", *csvFilename)
+		log.Fatalf("Failed to open a CSV file: %s\n", *csvFilename)
 	}
 	defer func() {
 		if err = file.Close(); err != nil {
@@ -34,7 +39,7 @@ func main() {
 	csv := csv.NewReader(file)
 	records, err := csv.ReadAll()
 	if err != nil {
-		log.Printf("Couldn't parse CSV file: %v\n", err)
+		log.Printf("Could not parse CSV file: %v\n", err)
 	}
 	problems := questionsPool(records)
 
@@ -83,9 +88,8 @@ type problem struct {
 	ans int
 }
 
-
 func questionsPool(r [][]string) Problems {
-	quiz := make(Problems, len(r))	
+	quiz := make(Problems, len(r))
 	for i, v := range r {
 		var p problem
 		p.q = v[0]
